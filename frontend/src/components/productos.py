@@ -250,7 +250,7 @@ def productos(router) -> ft.Control:
                                     ),
                                     ft.IconButton(
                                         icon=ft.Icons.DELETE_OUTLINE,
-                                        icon_color=constants.ft.Colors.RED_400,
+                                        icon_color=ft.Colors.RED_400,
                                         tooltip="Eliminar",
                                         on_click=onEliminar,
                                         icon_size=18,
