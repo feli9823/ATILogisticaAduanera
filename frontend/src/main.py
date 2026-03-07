@@ -67,12 +67,10 @@ def main(page: ft.Page):
     page.padding = 0
 
     # ── Manejador de navegación entre vistas ────────────
-
+    router = routing.Router(page)
         
-
     # ── Cargar vista inicial ─────────────────────────────
-    page.add(view_bienvenida(on_empezar=lambda e: routing.navegarLogin(page)))
-
+    page.add(view_bienvenida(on_empezar=lambda e: router.navegarLogin()))
 
 
 ft.run(main)
