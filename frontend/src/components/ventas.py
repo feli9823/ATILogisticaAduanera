@@ -2,22 +2,7 @@ import flet as ft
 import styles.constants as constants
 from views.dashboard import layoutPrincipal
 from controller import ventaController, productosController, paisController
-
-
-# ─────────────────────────────────────────────
-#  Utilidades para diálogos
-# ─────────────────────────────────────────────
-def abrirDialogo(page: ft.Page, dlg: ft.AlertDialog):
-    if dlg not in page.overlay:
-        page.overlay.append(dlg)
-    dlg.open = True
-    page.update()
-
-
-def cerrarDialogo(page: ft.Page, dlg: ft.AlertDialog):
-    dlg.open = False
-    page.update()
-
+from components.uiHelper import abrirDialogo, cerrarDialogo,filaDetalle
 
 # ─────────────────────────────────────────────
 #  Diálogo: Añadir / Editar venta
@@ -138,13 +123,7 @@ def dialogoVenta(page: ft.Page, onGuardar, venta: dict = None, errorRef=None) ->
 # ─────────────────────────────────────────────
 def dialogoVer(page: ft.Page, venta: dict) -> ft.AlertDialog:
 
-    def filaDetalle(label, valor):
-        return ft.Row(
-            controls=[
-                ft.Text(label, color="#6C7086", size=13, width=160),
-                ft.Text(str(valor), color=constants.TEXT_COLOR, size=13),
-            ],
-        )
+    
 
     dlg = ft.AlertDialog(
         modal=True,

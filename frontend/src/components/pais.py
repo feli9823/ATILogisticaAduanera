@@ -2,33 +2,11 @@ import flet as ft
 import styles.constants as constants
 from views.dashboard import layoutPrincipal
 import controller.paisController as paisController
-
+from components.uiHelper import abrirDialogo, cerrarDialogo, filaDetalle,monedasDisponibles
 
 # ─────────────────────────────────────────────
 #  Monedas disponibles (RF-13)
 # ─────────────────────────────────────────────
-monedasDisponibles = [
-    ft.dropdown.Option(key="CRC", text="₡ Colones (CRC)"),
-    ft.dropdown.Option(key="USD", text="$ Dólares (USD)"),
-    ft.dropdown.Option(key="EUR", text="€ Euros (EUR)"),
-    ft.dropdown.Option(key="BRL", text="R$ Reales Brasileños (BRL)"),
-]
-
-
-# ─────────────────────────────────────────────
-#  Utilidades para diálogos
-# ─────────────────────────────────────────────
-def abrirDialogo(page: ft.Page, dlg: ft.AlertDialog):
-    if dlg not in page.overlay:
-        page.overlay.append(dlg)
-    dlg.open = True
-    page.update()
-
-
-def cerrarDialogo(page: ft.Page, dlg: ft.AlertDialog):
-    dlg.open = False
-    page.update()
-
 
 # ─────────────────────────────────────────────
 #  Diálogo: Añadir / Editar país
@@ -127,13 +105,7 @@ def dialogoPais(page: ft.Page, onGuardar, paisItem: dict = None, errorRef=None) 
 # ─────────────────────────────────────────────
 def dialogoVer(page: ft.Page, paisItem: dict) -> ft.AlertDialog:
 
-    def filaDetalle(label, valor):
-        return ft.Row(
-            controls=[
-                ft.Text(label, color="#6C7086", size=13, width=160),
-                ft.Text(str(valor), color=constants.TEXT_COLOR, size=13),
-            ],
-        )
+    
 
     dlg = ft.AlertDialog(
         modal=True,

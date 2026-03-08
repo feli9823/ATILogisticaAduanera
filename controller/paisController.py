@@ -90,13 +90,3 @@ def obtenerPaises() -> list[dict]:
         }
         for id, p in datos.items()
     ]
-
-
-# ─────────────────────────────────────────────
-#  Obtener país por id
-# ─────────────────────────────────────────────
-def obtenerPaisPorId(id: int) -> dict | None:
-    datos = _modeloPais.listaPais
-    if id in datos:
-        return {"id": id, **datos[id]}
-    return None

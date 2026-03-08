@@ -1,3 +1,4 @@
+from shared.constantes import MONEDAS_VALIDAS
 def validarProductoId(productoId) -> bool:
     return isinstance(productoId, int) and productoId > 0
 
@@ -14,5 +15,4 @@ def validarPrecioModificado(precio) -> bool:
     return True
 
 def validarMoneda(moneda: str) -> bool:
-    MONEDAS_VALIDAS = {"CRC", "USD", "EUR", "BRL"}
     return isinstance(moneda, str) and moneda.strip() in MONEDAS_VALIDAS

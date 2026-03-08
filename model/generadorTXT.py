@@ -22,6 +22,42 @@ def _asegurarCarpeta():
 class generadorTXT:
 
     @staticmethod
+    def cargarDesdeTXT(nombreArchivo: str, parser) -> list:
+        """
+        Lee un TXT línea por línea y aplica el parser a cada una.
+
+        Parámetros:
+            nombreArchivo : str      — nombre del archivo en documentos/
+            parser        : callable — función (linea: str) -> dict | None
+                            Retorna un dict con los datos parseados,
+                            o None para saltar la línea (vacía o inválida).
+
+        Retorna:
+            list[dict] — lista de registros parseados correctamente.
+
+        Uso en cada model:
+            registros = generadorTXT.cargarDesdeTXT("paises.txt", self._parsearLinea)
+        """
+        rutaArchivo = os.path.join(_rutaBase, nombreArchivo)
+        if not os.path.exists(rutaArchivo):
+            return []
+        registros = []
+        try:
+            with open(rutaArchivo, "r", encoding="utf-8") as f:
+                for linea in f:
+                    linea = linea.strip()
+                    if not linea:
+                        continue
+                    resultado = parser(linea)
+                    if resultado is not None:
+                        registros.append(resultado)
+        except Exception as e:
+            print(f"[generadorTXT] Error al cargar {nombreArchivo}: {e}")
+        return registros
+
+
+    
+    @staticmethod
     def registrarTXT(item,nombreArchivo):
         """
         Agrega un producto al archivo productos.txt
@@ -105,7 +141,8 @@ class generadorTXT:
             print(f"[generadorTXT] Error: {e}")
             return False
         
-    def generarArchivo(self, nombreArchivo: str, contenido: str = ""):
+    @staticmethod
+    def generarArchivo( nombreArchivo: str, contenido: str = ""):
         """
         Crea o sobreescribe un archivo en documentos/.
         """
@@ -118,3 +155,6 @@ class generadorTXT:
         except Exception as e:
             print(f"[generadorTXT] Error: {e}")
             return False
+
+
+        

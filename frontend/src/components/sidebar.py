@@ -1,5 +1,7 @@
 import flet as ft
 import styles.constants as constants
+from controller import usuarioController
+from shared import session
 
 SIDEBAR_BG    = "#1A1A2E"
 ITEM_HOVER    = "#2A2A3E"
@@ -34,6 +36,74 @@ def _sidebar_item(label, icon, active, on_click) -> ft.Control:
         ink=True,
         on_hover=_on_hover,
     )
+
+def _usuario_widget(router) -> ft.Control:
+    """
+    Widget inferior del sidebar que muestra la sesión activa.
+    Al pasar el mouse aparece un tooltip con ID, username y correo.
+    """
+    sesion = session.obtener() 
+    if not sesion:
+        return ft.Container()
+
+    username = sesion["username"]
+    correo   = sesion["correo"]
+    uid      = sesion["id"]
+    inicial  = username[0].upper()
+
+    # El tooltip se asigna como propiedad del Container, no como wrapper
+    return ft.Container(
+        padding=ft.Padding.symmetric(horizontal=12, vertical=10),
+        border_radius=8,
+        bgcolor=SIDEBAR_BG,
+        tooltip=f"ID: {uid}  |  @{username}\n{correo}",
+        on_hover=lambda e: (
+            setattr(e.control, "bgcolor", ITEM_HOVER if e.data == "true" else SIDEBAR_BG),
+            e.control.update()
+        ),
+        content=ft.Row(
+            spacing=10,
+            vertical_alignment=ft.CrossAxisAlignment.CENTER,
+            controls=[
+                # ── Avatar circular ──────────────────────────
+                ft.Container(
+                    width=34,
+                    height=34,
+                    border_radius=17,
+                    bgcolor=ITEM_ACTIVE,
+                    alignment=ft.Alignment.CENTER,
+                    content=ft.Text(
+                        inicial,
+                        color="#121212",
+                        size=14,
+                        weight=ft.FontWeight.BOLD,
+                    ),
+                ),
+                # ── Username y correo ────────────────────────
+                ft.Column(
+                    spacing=1,
+                    tight=True,
+                    controls=[
+                        ft.Text(
+                            f"{username}",
+                            color=ITEM_TEXT,
+                            size=13,
+                            weight=ft.FontWeight.W_500,
+                        ),
+                        ft.Text(
+                            correo,
+                            color=ICON_INACTIVE,
+                            size=10,
+                            overflow=ft.TextOverflow.ELLIPSIS,
+                            max_lines=1,
+                            width=130,
+                        ),
+                    ],
+                ),
+            ],
+        ),
+    )
+
 
 
 class Sidebar:
@@ -74,7 +144,7 @@ class Sidebar:
                 "label": "Consultas de ventas",
                 "icon" : ft.Icons.QUESTION_MARK,
                 "key"  : "consultas_ventas",
-                "action": lambda e: router.consultasVentas(),
+                "action": lambda e: router.navegarConsultasVentas(),
             },
 
             {
@@ -140,6 +210,13 @@ class Sidebar:
                         )
                         for item in nav_items
                     ],
+
+                    ft.Container(expand=True),
+
+                    ft.Divider(color="#2A2A3E", height=1),
+
+                    # ── Widget de sesión activa ──────────────────
+                    _usuario_widget(router),
 
                 ],
             ),

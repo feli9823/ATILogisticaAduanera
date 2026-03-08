@@ -30,7 +30,7 @@ class Router:
     def navegarVentas(self):
         self.navegar(ventas.ventas(self))
 
-    def consultasVentas(self):
+    def navegarConsultasVentas(self):
         self.navegar(consultasVentas.consultasVentas(self))
 
 

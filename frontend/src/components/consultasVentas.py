@@ -1,37 +1,31 @@
 import flet as ft
 import styles.constants as constants
 from views.dashboard import layoutPrincipal
-
-
-
+from controller import ventaController, paisController, conversorController
+from shared import constantes
+from components.uiHelper import monedasDisponibles
 
 TODAS_MONEDAS = "TODAS"
 
 monedasFiltro = [
     ft.dropdown.Option(key=TODAS_MONEDAS, text="Todas las monedas"),
-    ft.dropdown.Option(key="CRC", text="₡ Colones (CRC)"),
-    ft.dropdown.Option(key="USD", text="$ Dólares (USD)"),
-    ft.dropdown.Option(key="EUR", text="€ Euros (EUR)"),
-    ft.dropdown.Option(key="BRL", text="R$ Reales Brasileños (BRL)"),
+    *monedasDisponibles,
 ]
 
-# ─────────────────────────────────────────────
+
+# ────────────────────────────
 #  Helpers
-# ─────────────────────────────────────────────
-def obtenerImpuestoPais(paisId: int) -> float:
-    """ Obtiene la tarifa de impuesto del país registrado."""
-    pais = next((p for p in listaPaises if p["id"] == paisId), None)
-    return pais["impuesto"] if pais else 0.0
+# ─────────────────────────────
 
 
 def calcularCostoTotal(precio: float, impuestoPct: float) -> float:
-    """ CostoTotal = Precio + (Precio * Impuesto)"""
+    """RF-15: CostoTotal = Precio + (Precio * Impuesto)"""
     return precio + (precio * (impuestoPct / 100))
 
 
 def formatearMoneda(valor: float, moneda: str) -> str:
-    simbolos = {"CRC": "₡", "USD": "$", "EUR": "€", "BRL": "R$"}
-    simbolo = simbolos.get(moneda, moneda)
+    simbolos = constantes.SIMBOLOS_MONEDA
+    simbolo  = simbolos.get(moneda, moneda)
     return f"{simbolo} {valor:,.2f}"
 
 
@@ -45,41 +39,45 @@ def consultasVentas(router) -> ft.Control:
     filtroRef  = ft.Ref[ft.Dropdown]()
 
     def construirFilas(monedaDestino: str = TODAS_MONEDAS) -> list[ft.DataRow]:
-        if not listaVentas:
+        ventas = ventaController.obtenerVentas()
+        if not ventas:
             return []
-
+        impuestosPorPais = {
+            p["id"]: p["tarifaImpuesto"]
+            for p in paisController.obtenerPaises()
+        }
         filas = []
-        for i, v in enumerate(listaVentas):
+        for i, v in enumerate(ventas):
             bgColor     = constants.tableRowBg if i % 2 == 0 else constants.tableRowAlt
-            impuestoPct = obtenerImpuestoPais(v["paisId"])   # RF-14
+            impuestoPct = impuestosPorPais.get(v["paisId"], 0.0)
             precioBase  = v["precioModificado"]
             costoTotal  = calcularCostoTotal(precioBase, impuestoPct)  # RF-15
             impuestoVal = costoTotal - precioBase
 
-
-
+            # ── RF-16: Conversión de moneda ───────────────────────────
+            monedaMostrar = monedaDestino if monedaDestino != TODAS_MONEDAS else v["moneda"]
 
             if monedaDestino != TODAS_MONEDAS and monedaDestino != v["moneda"]:
-                print(
-                    f"[CONVERSION PENDIENTE] "
-                    f"producto='{v['nombreProducto']}' | "
-                    f"moneda_origen='{v['moneda']}' | "
-                    f"moneda_destino='{monedaDestino}' | "
-                    f"precioBase={precioBase} | "
-                    f"impuestoVal={impuestoVal:.4f} | "
-                    f"costoTotal={costoTotal:.4f}"
-                )
-            # ─────────────────────────────────────────────────────────────
+                precioBase  = conversorController.convertir(precioBase,  v["moneda"], monedaDestino)
+                impuestoVal = conversorController.convertir(impuestoVal, v["moneda"], monedaDestino)
+                costoTotal  = conversorController.convertir(costoTotal,  v["moneda"], monedaDestino)
 
-            monedaMostrar = monedaDestino if monedaDestino != TODAS_MONEDAS else v["moneda"]
+                # Si el controller retorna un string es un error — mostrar 0 y no crashear
+                if isinstance(precioBase,  str): precioBase  = 0.0
+                if isinstance(impuestoVal, str): impuestoVal = 0.0
+                if isinstance(costoTotal,  str): costoTotal  = 0.0
+            # ─────────────────────────────────────────────────────────
 
             filas.append(
                 ft.DataRow(
                     color=bgColor,
                     cells=[
-                        ft.DataCell(ft.Text(v["nombreProducto"],               color=constants.TEXT_COLOR, size=13)),
-                        ft.DataCell(ft.Text(v["nombrePais"],                   color=constants.TEXT_COLOR, size=13)),
-                        ft.DataCell(ft.Text(formatearMoneda(precioBase, monedaMostrar),  color=constants.TEXT_COLOR, size=13)),
+                        ft.DataCell(ft.Text(v["nombreProducto"],
+                            color=constants.TEXT_COLOR, size=13)),
+                        ft.DataCell(ft.Text(v["nombrePais"],
+                            color=constants.TEXT_COLOR, size=13)),
+                        ft.DataCell(ft.Text(formatearMoneda(precioBase, monedaMostrar),
+                            color=constants.TEXT_COLOR, size=13)),
                         ft.DataCell(ft.Text(f"{impuestoPct:.1f}%",
                             color="#F38BA8" if impuestoPct > 0 else "#6C7086", size=13)),
                         ft.DataCell(ft.Text(formatearMoneda(impuestoVal, monedaMostrar),
@@ -104,7 +102,7 @@ def consultasVentas(router) -> ft.Control:
 
     def refrescar(monedaFiltro: str = TODAS_MONEDAS):
         filas = construirFilas(monedaFiltro)
-        tablaRef.current.rows   = filas
+        tablaRef.current.rows      = filas
         tablaRef.current.visible   = len(filas) > 0
         sinDataRef.current.visible = len(filas) == 0
         tablaRef.current.update()
@@ -122,7 +120,7 @@ def consultasVentas(router) -> ft.Control:
         heading_row_height=48,
         data_row_min_height=48,
         expand=True,
-        visible=len(listaVentas) > 0,
+        visible=False,
         columns=[
             ft.DataColumn(ft.Text("Producto",          color=constants.accentColor, weight=ft.FontWeight.BOLD, size=13)),
             ft.DataColumn(ft.Text("País",              color=constants.accentColor, weight=ft.FontWeight.BOLD, size=13)),
@@ -136,7 +134,7 @@ def consultasVentas(router) -> ft.Control:
 
     sinDatos = ft.Container(
         ref=sinDataRef,
-        visible=len(listaVentas) == 0,
+        visible=True,
         expand=True,
         alignment=ft.Alignment.CENTER,
         content=ft.Column(
@@ -181,13 +179,18 @@ def consultasVentas(router) -> ft.Control:
                             weight=ft.FontWeight.BOLD,
                             color=constants.TEXT_COLOR,
                         ),
+                        ft.Text(
+                            "Costo Total = Precio Base + (Precio Base × Impuesto)",
+                            size=12,
+                            color="#6C7086",
+                        ),
                     ],
                 ),
                 ft.Divider(color=constants.borderColor),
                 ft.Row(
                     controls=[
-                        ft.Icon(ft.Icons.FILTER_LIST_ROUNDED, color=constants.accentColor, size=20),
-                        ft.Text("Filtrar por moneda:", color="#6C7086", size=13),
+                        ft.Icon(ft.Icons.CURRENCY_EXCHANGE, color=constants.accentColor, size=20),
+                        ft.Text("Visualizar en:", color="#6C7086", size=13),
                         filtroMoneda,
                     ],
                     spacing=10,
