@@ -1,1 +1,0 @@
-ID: 1 | Producto: Reloj de bolsillo (ID:1) | Pais: Estados Unidos (ID:1) | Moneda: USD | Precio: 60.0

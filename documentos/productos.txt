@@ -1,2 +1,0 @@
-ID: 1 | Nombre: Reloj de bolsillo | Precio: 5500.0
-ID: 2 | Nombre: Martillo | Precio: 5000.0

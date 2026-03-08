@@ -1,1 +1,0 @@
-ID: 1 | Nombre: Estados Unidos | Impuesto: 16.0% | Moneda: USD
