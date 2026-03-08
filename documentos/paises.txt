@@ -1,2 +1,0 @@
-ID: 1 | Nombre: España | Impuesto: 25.0% | Moneda: EUR
-ID: 2 | Nombre: Estados Unidos | Impuesto: 12.0% | Moneda: USD

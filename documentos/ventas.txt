@@ -1,2 +1,0 @@
-ID: 1 | Producto: Oso (ID:1) | Pais: España (ID:1) | Moneda: EUR | Precio: 55.0
-ID: 2 | Producto: Oso (ID:1) | Pais: Estados Unidos (ID:2) | Moneda: USD | Precio: 21111.0
