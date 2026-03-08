@@ -1,49 +1,83 @@
 import flet as ft
 import styles.constants as constants
+import controller.usuarioController as usuarioController
+
 
 def loginUser(router) -> ft.Control:
-    labelTextColor= '#333333'
+    labelTextColor = "#333333"
+
+    campoUsuario = ft.TextField(
+        label="Usuario",
+        width=300,
+        border_color=labelTextColor,
+        focused_border_color=constants.accentColor,
+    )
+    campoCorreo = ft.TextField(
+        label="Correo Electrónico",
+        width=300,
+        border_color=labelTextColor,
+        focused_border_color=constants.accentColor,
+    )
+    errorTxt = ft.Text("", color=ft.Colors.RED_400, size=12)
+
+    def onIngresar(e):
+        # Limpiar error previo
+        errorTxt.value = ""
+        errorTxt.update()
+
+        # Validación frontend: campos no vacíos
+        if not campoUsuario.value.strip():
+            errorTxt.value = "El campo usuario es obligatorio."
+            errorTxt.update()
+            return
+        if not campoCorreo.value.strip():
+            errorTxt.value = "El campo correo es obligatorio."
+            errorTxt.update()
+            return
+
+        # Delegar al controller — registra o valida según el caso
+        resultado = usuarioController.ingresar(
+            username=campoUsuario.value.strip(),
+            correo=campoCorreo.value.strip(),
+        )
+
+        if isinstance(resultado, str):
+            # Error del controller → mostrar en pantalla sin navegar
+            errorTxt.value = resultado
+            errorTxt.update()
+        else:
+            # Éxito (registro nuevo o acceso existente) → navegar
+            router.navegarDashboard()
+
     return ft.Container(
         expand=True,
         bgcolor=constants.BG_COLOR,
-        alignment=ft.Alignment.CENTER,          
+        alignment=ft.Alignment.CENTER,
         content=ft.Column(
-            tight=True,                          
+            tight=True,
             horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-            spacing=36,                          
+            spacing=36,
             controls=[
 
-                # ── Título del sistema ──────────────────────────
                 ft.Text(
-                    "Inicie sesion",
+                    "Inicie sesión",
                     size=36,
                     weight=ft.FontWeight.BOLD,
                     color=constants.TEXT_COLOR,
                     text_align=ft.TextAlign.CENTER,
                 ),
 
-                # ── Formulario de login ───────────────────────────
                 ft.Column(
                     tight=True,
                     horizontal_alignment=ft.CrossAxisAlignment.CENTER,
                     spacing=16,
                     controls=[
-                        ft.TextField(
-                            label="Usuario",
-                            width=300,
-                            border_color=labelTextColor,
-                            focused_border_color=constants.BG_COLOR,
-                        ),
-                        ft.TextField(
-                            label="Correo Electrónico",
-                            width=300,
-                            border_color=labelTextColor,
-                            focused_border_color=constants.BG_COLOR,
-                            
-                        ),
+                        campoUsuario,
+                        campoCorreo,
+                        errorTxt,
                         ft.Button(
-                            content=ft.Text("Iniciar Sesión"),
-                            on_click=lambda e: router.navegarDashboard(),
+                            content=ft.Text("Ingresar"),
+                            on_click=onIngresar,
                             style=ft.ButtonStyle(
                                 bgcolor={
                                     ft.ControlState.DEFAULT: constants.BTN_BG,
@@ -63,9 +97,8 @@ def loginUser(router) -> ft.Control:
                             width=300,
                         ),
                     ],
-                )
+                ),
 
             ],
         ),
     )
-

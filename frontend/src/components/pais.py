@@ -1,6 +1,7 @@
 import flet as ft
 import styles.constants as constants
 from views.dashboard import layoutPrincipal
+import controller.paisController as paisController
 
 
 # ─────────────────────────────────────────────
@@ -12,12 +13,6 @@ monedasDisponibles = [
     ft.dropdown.Option(key="EUR", text="€ Euros (EUR)"),
     ft.dropdown.Option(key="BRL", text="R$ Reales Brasileños (BRL)"),
 ]
-
-# ─────────────────────────────────────────────
-#  Datos en memoria
-# ─────────────────────────────────────────────
-listaPaises: list[dict] = []
-nextId = 1
 
 
 # ─────────────────────────────────────────────
@@ -38,23 +33,21 @@ def cerrarDialogo(page: ft.Page, dlg: ft.AlertDialog):
 # ─────────────────────────────────────────────
 #  Diálogo: Añadir / Editar país
 # ─────────────────────────────────────────────
-def dialogoPais(page: ft.Page, onGuardar, pais: dict = None) -> ft.AlertDialog:
-    esEdicion = pais is not None
+def dialogoPais(page: ft.Page, onGuardar, paisItem: dict = None, errorRef=None) -> ft.AlertDialog:
+    esEdicion = paisItem is not None
 
     campoNombre = ft.TextField(
         label="Nombre del país",
-        value=pais["nombre"] if esEdicion else "",
+        value=paisItem["nombre"] if esEdicion else "",
         border_color=constants.borderColor,
         focused_border_color=constants.accentColor,
         color=constants.TEXT_COLOR,
         label_style=ft.TextStyle(color="#6C7086"),
         width=320,
     )
-
-    # RF-12: tarifa de impuesto
     campoImpuesto = ft.TextField(
         label="Tarifa de impuesto (%)",
-        value=str(pais["impuesto"]) if esEdicion else "",
+        value=str(paisItem["tarifaImpuesto"]) if esEdicion else "",
         border_color=constants.borderColor,
         focused_border_color=constants.accentColor,
         color=constants.TEXT_COLOR,
@@ -62,11 +55,9 @@ def dialogoPais(page: ft.Page, onGuardar, pais: dict = None) -> ft.AlertDialog:
         keyboard_type=ft.KeyboardType.NUMBER,
         width=320,
     )
-
-    # RF-13: selección de moneda
     campoMoneda = ft.Dropdown(
         label="Moneda",
-        value=pais["moneda"] if esEdicion else "USD",
+        value=paisItem["tipoMoneda"] if esEdicion else "USD",
         options=monedasDisponibles,
         border_color=constants.borderColor,
         focused_border_color=constants.accentColor,
@@ -75,32 +66,28 @@ def dialogoPais(page: ft.Page, onGuardar, pais: dict = None) -> ft.AlertDialog:
         width=320,
     )
 
-    errorTxt = ft.Text("", color=ft.Colors.RED_400, size=12)
+    # errorTxt vinculado al ref externo para que onGuardar pueda actualizarlo
+    errorTxt = ft.Text("", color=ft.Colors.RED_400, size=12, ref=errorRef)
 
     def guardar(e):
-        if not campoNombre.value.strip():
-            errorTxt.value = "El nombre del país es obligatorio."
-            errorTxt.update()
-            return
-        if not campoImpuesto.value.strip():
-            errorTxt.value = "La tarifa de impuesto es obligatoria."
-            errorTxt.update()
-            return
+        # Limpiar error previo
+        errorTxt.value = ""
+        errorTxt.update()
+
+        # Única validación en el frontend: conversión de string a float
         try:
             impuesto = float(campoImpuesto.value.strip())
-            if impuesto < 0 or impuesto > 100:
-                raise ValueError
         except ValueError:
-            errorTxt.value = "La tarifa debe ser un número entre 0 y 100."
+            errorTxt.value = "La tarifa debe ser un número (ej: 13 o 13.5)."
             errorTxt.update()
             return
 
+        # Delegar todo lo demás al controller via onGuardar
         onGuardar({
-            "nombre"  : campoNombre.value.strip(),
-            "impuesto": impuesto,
-            "moneda"  : campoMoneda.value or "USD",
+            "nombre"         : campoNombre.value.strip(),
+            "tarifaImpuesto" : impuesto,
+            "tipoMoneda"     : campoMoneda.value or "USD",
         })
-        cerrarDialogo(page, dlg)
 
     dlg = ft.AlertDialog(
         modal=True,
@@ -138,7 +125,7 @@ def dialogoPais(page: ft.Page, onGuardar, pais: dict = None) -> ft.AlertDialog:
 # ─────────────────────────────────────────────
 #  Diálogo: Ver país
 # ─────────────────────────────────────────────
-def dialogoVer(page: ft.Page, pais: dict) -> ft.AlertDialog:
+def dialogoVer(page: ft.Page, paisItem: dict) -> ft.AlertDialog:
 
     def filaDetalle(label, valor):
         return ft.Row(
@@ -160,10 +147,10 @@ def dialogoVer(page: ft.Page, pais: dict) -> ft.AlertDialog:
             tight=True,
             spacing=10,
             controls=[
-                filaDetalle("ID",               pais["id"]),
-                filaDetalle("Nombre",           pais["nombre"]),
-                filaDetalle("Tarifa impuesto",  f"{pais['impuesto']}%"),
-                filaDetalle("Moneda",           pais["moneda"]),
+                filaDetalle("ID",              paisItem["id"]),
+                filaDetalle("Nombre",          paisItem["nombre"]),
+                filaDetalle("Tarifa impuesto", f"{paisItem['tarifaImpuesto']}%"),
+                filaDetalle("Moneda",          paisItem["tipoMoneda"]),
             ],
         ),
         actions=[
@@ -181,7 +168,7 @@ def dialogoVer(page: ft.Page, pais: dict) -> ft.AlertDialog:
 # ─────────────────────────────────────────────
 #  Diálogo: Eliminar país
 # ─────────────────────────────────────────────
-def dialogoEliminar(page: ft.Page, pais: dict, onConfirmar) -> ft.AlertDialog:
+def dialogoEliminar(page: ft.Page, paisItem: dict, onConfirmar) -> ft.AlertDialog:
     dlg = ft.AlertDialog(
         modal=True,
         title=ft.Text(
@@ -191,7 +178,7 @@ def dialogoEliminar(page: ft.Page, pais: dict, onConfirmar) -> ft.AlertDialog:
         ),
         bgcolor="#1E1E2E",
         content=ft.Text(
-            f'¿Estás seguro de eliminar "{pais["nombre"]}"?',
+            f'¿Estás seguro de eliminar "{paisItem["nombre"]}"?',
             color=constants.TEXT_COLOR,
         ),
         actions=[
@@ -218,16 +205,16 @@ def dialogoEliminar(page: ft.Page, pais: dict, onConfirmar) -> ft.AlertDialog:
 #  Vista principal de País
 # ─────────────────────────────────────────────
 def pais(router) -> ft.Control:
-    global nextId
 
     tablaRef = ft.Ref[ft.DataTable]()
 
     def construirFilas() -> list[ft.DataRow]:
-        if not listaPaises:
+        datos = paisController.obtenerPaises()
+        if not datos:
             return []
 
         filas = []
-        for i, p in enumerate(listaPaises):
+        for i, p in enumerate(datos):
             bgColor = constants.tableRowBg if i % 2 == 0 else constants.tableRowAlt
 
             def onVer(e, item=p):
@@ -235,17 +222,29 @@ def pais(router) -> ft.Control:
                 abrirDialogo(router.page, dlg)
 
             def onEditar(e, item=p):
+                errorRef = ft.Ref[ft.Text]()
+
                 def guardarEdicion(datos):
-                    item["nombre"]   = datos["nombre"]
-                    item["impuesto"] = datos["impuesto"]
-                    item["moneda"]   = datos["moneda"]
-                    refrescar()
-                dlg = dialogoPais(router.page, guardarEdicion, item)
+                    resultado = paisController.modificarPais(
+                        id=item["id"],
+                        nombre=datos["nombre"],
+                        tarifaImpuesto=datos["tarifaImpuesto"],
+                        tipoMoneda=datos["tipoMoneda"],
+                    )
+                    if isinstance(resultado, str):
+                        # Error del controller → mostrar en el diálogo
+                        errorRef.current.value = resultado
+                        errorRef.current.update()
+                    else:
+                        refrescar()
+                        cerrarDialogo(router.page, dlg)
+
+                dlg = dialogoPais(router.page, guardarEdicion, item, errorRef=errorRef)
                 abrirDialogo(router.page, dlg)
 
             def onEliminar(e, item=p):
                 def confirmar():
-                    listaPaises.remove(item)
+                    paisController.eliminarPais(item["id"])
                     refrescar()
                 dlg = dialogoEliminar(router.page, item, confirmar)
                 abrirDialogo(router.page, dlg)
@@ -254,9 +253,9 @@ def pais(router) -> ft.Control:
                 ft.DataRow(
                     color=bgColor,
                     cells=[
-                        ft.DataCell(ft.Text(str(p["id"]),         color=constants.TEXT_COLOR, size=13)),
-                        ft.DataCell(ft.Text(p["nombre"],          color=constants.TEXT_COLOR, size=13)),
-                        ft.DataCell(ft.Text(f"{p['impuesto']}%",  color=constants.TEXT_COLOR, size=13)),
+                        ft.DataCell(ft.Text(str(p["id"]),              color=constants.TEXT_COLOR, size=13)),
+                        ft.DataCell(ft.Text(p["nombre"],               color=constants.TEXT_COLOR, size=13)),
+                        ft.DataCell(ft.Text(f"{p['tarifaImpuesto']}%", color=constants.TEXT_COLOR, size=13)),
                         ft.DataCell(
                             ft.Row(
                                 spacing=4,
@@ -295,20 +294,24 @@ def pais(router) -> ft.Control:
         tablaRef.current.update()
 
     def abrirDialogoAgregar(e):
-        global nextId
+        errorRef = ft.Ref[ft.Text]()
 
         def guardarNuevo(datos):
-            global nextId
-            listaPaises.append({
-                "id"      : nextId,
-                "nombre"  : datos["nombre"],
-                "impuesto": datos["impuesto"],
-                "moneda"  : datos["moneda"],
-            })
-            nextId += 1
-            refrescar()
+            resultado = paisController.guardarPais(
+                nombre=datos["nombre"],
+                tarifaImpuesto=datos["tarifaImpuesto"],
+                tipoMoneda=datos["tipoMoneda"],
+            )
+            if isinstance(resultado, str):
+                # Error del controller → mostrar en el diálogo sin cerrarlo
+                errorRef.current.value = resultado
+                errorRef.current.update()
+            else:
+                # Éxito → refrescar tabla y cerrar
+                refrescar()
+                cerrarDialogo(router.page, dlg)
 
-        dlg = dialogoPais(router.page, guardarNuevo)
+        dlg = dialogoPais(router.page, guardarNuevo, errorRef=errorRef)
         abrirDialogo(router.page, dlg)
 
     tabla = ft.DataTable(
@@ -321,10 +324,10 @@ def pais(router) -> ft.Control:
         data_row_min_height=48,
         expand=True,
         columns=[
-            ft.DataColumn(ft.Text("ID",                color=constants.accentColor, weight=ft.FontWeight.BOLD, size=13)),
-            ft.DataColumn(ft.Text("Nombre País",       color=constants.accentColor, weight=ft.FontWeight.BOLD, size=13)),
-            ft.DataColumn(ft.Text("Tarifa Impuesto",   color=constants.accentColor, weight=ft.FontWeight.BOLD, size=13)),
-            ft.DataColumn(ft.Text("Acciones",          color=constants.accentColor, weight=ft.FontWeight.BOLD, size=13)),
+            ft.DataColumn(ft.Text("ID",              color=constants.accentColor, weight=ft.FontWeight.BOLD, size=13)),
+            ft.DataColumn(ft.Text("Nombre País",     color=constants.accentColor, weight=ft.FontWeight.BOLD, size=13)),
+            ft.DataColumn(ft.Text("Tarifa Impuesto", color=constants.accentColor, weight=ft.FontWeight.BOLD, size=13)),
+            ft.DataColumn(ft.Text("Acciones",        color=constants.accentColor, weight=ft.FontWeight.BOLD, size=13)),
         ],
         rows=construirFilas(),
     )

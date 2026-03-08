@@ -1,8 +1,8 @@
 import flet as ft
 import styles.constants as constants
 from views.dashboard import layoutPrincipal
-from components.ventas import listaVentas
-from components.pais import listaPaises
+
+
 
 
 TODAS_MONEDAS = "TODAS"

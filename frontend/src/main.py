@@ -1,7 +1,15 @@
+import sys
+import os
+
+sys.path.insert(0, os.path.dirname(__file__))
+rootPath = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../"))
+sys.path.insert(0, rootPath)
+
 import flet as ft
 
 import styles.constants as constants
 import router.routing as routing
+
 def view_bienvenida(on_empezar) -> ft.Control:
     """
     Vista inicial con el nombre del sistema centrado

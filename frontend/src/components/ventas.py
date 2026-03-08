@@ -1,20 +1,7 @@
 import flet as ft
 import styles.constants as constants
 from views.dashboard import layoutPrincipal
-
-# ─────────────────────────────────────────────
-#  Importamos los datos de productos y países
-#  para poblar los dropdowns
-# ─────────────────────────────────────────────
-from components.productos import listaProductos
-from components.pais import listaPaises
-
-
-# ─────────────────────────────────────────────
-#  Datos en memoria
-# ─────────────────────────────────────────────
-listaVentas: list[dict] = []
-nextId = 1
+from controller import ventaController, productosController, paisController
 
 
 # ─────────────────────────────────────────────
@@ -33,21 +20,19 @@ def cerrarDialogo(page: ft.Page, dlg: ft.AlertDialog):
 
 
 # ─────────────────────────────────────────────
-#  Diálogo: Añadir / Editar venta (RF-11)
+#  Diálogo: Añadir / Editar venta
 # ─────────────────────────────────────────────
-def dialogoVenta(page: ft.Page, onGuardar, venta: dict = None) -> ft.AlertDialog:
+def dialogoVenta(page: ft.Page, onGuardar, venta: dict = None, errorRef=None) -> ft.AlertDialog:
     esEdicion = venta is not None
 
-    # ── Opciones de productos desde memoria ─────────────
+    # ── Opciones desde controllers ───────────────────────
     opcionesProductos = [
         ft.dropdown.Option(key=str(p["id"]), text=p["nombre"])
-        for p in listaProductos
+        for p in productosController.obtenerProductos()
     ]
-
-    # ── Opciones de países desde memoria ────────────────
     opcionesPaises = [
-        ft.dropdown.Option(key=str(p["id"]), text=f"{p['nombre']} ({p['moneda']})")
-        for p in listaPaises
+        ft.dropdown.Option(key=str(p["id"]), text=f"{p['nombre']} ({p['tipoMoneda']})")
+        for p in paisController.obtenerPaises()
     ]
 
     campoProducto = ft.Dropdown(
@@ -62,7 +47,6 @@ def dialogoVenta(page: ft.Page, onGuardar, venta: dict = None) -> ft.AlertDialog
         label_style=ft.TextStyle(color="#6C7086"),
         width=320,
     )
-
     campoPais = ft.Dropdown(
         label="País de venta",
         value=str(venta["paisId"]) if esEdicion else None,
@@ -75,8 +59,6 @@ def dialogoVenta(page: ft.Page, onGuardar, venta: dict = None) -> ft.AlertDialog
         label_style=ft.TextStyle(color="#6C7086"),
         width=320,
     )
-
-    # RF-11: precio modificado por país
     campoPrecio = ft.TextField(
         label="Precio modificado",
         value=str(venta["precioModificado"]) if esEdicion else "",
@@ -89,10 +71,13 @@ def dialogoVenta(page: ft.Page, onGuardar, venta: dict = None) -> ft.AlertDialog
         hint_style=ft.TextStyle(color="#3C3C4E"),
         width=320,
     )
-
-    errorTxt = ft.Text("", color=ft.Colors.RED_400, size=12)
+    errorTxt = ft.Text("", color=ft.Colors.RED_400, size=12, ref=errorRef)
 
     def guardar(e):
+        errorTxt.value = ""
+        errorTxt.update()
+
+        # Validaciones frontend: selección y conversión numérica
         if not campoProducto.value:
             errorTxt.value = "Selecciona un producto."
             errorTxt.update()
@@ -101,39 +86,19 @@ def dialogoVenta(page: ft.Page, onGuardar, venta: dict = None) -> ft.AlertDialog
             errorTxt.value = "Selecciona un país de venta."
             errorTxt.update()
             return
-        if not campoPrecio.value.strip():
-            errorTxt.value = "El precio modificado es obligatorio."
-            errorTxt.update()
-            return
         try:
             precio = float(campoPrecio.value.strip())
-            if precio < 0:
-                raise ValueError
         except ValueError:
-            errorTxt.value = "El precio debe ser un número positivo."
+            errorTxt.value = "El precio debe ser un número (ej: 1500 o 99.99)."
             errorTxt.update()
             return
 
-        # Resolvemos los nombres a partir de los IDs
-        nombreProducto = next(
-            (p["nombre"] for p in listaProductos if str(p["id"]) == campoProducto.value), "—"
-        )
-        nombrePais = next(
-            (p["nombre"] for p in listaPaises if str(p["id"]) == campoPais.value), "—"
-        )
-        monedaPais = next(
-            (p["moneda"] for p in listaPaises if str(p["id"]) == campoPais.value), "USD"
-        )
-
+        # Delegar al controller
         onGuardar({
             "productoId"      : int(campoProducto.value),
-            "nombreProducto"  : nombreProducto,
             "paisId"          : int(campoPais.value),
-            "nombrePais"      : nombrePais,
-            "moneda"          : monedaPais,
             "precioModificado": precio,
         })
-        cerrarDialogo(page, dlg)
 
     dlg = ft.AlertDialog(
         modal=True,
@@ -193,10 +158,10 @@ def dialogoVer(page: ft.Page, venta: dict) -> ft.AlertDialog:
             tight=True,
             spacing=10,
             controls=[
-                filaDetalle("ID",               venta["id"]),
-                filaDetalle("Producto",         venta["nombreProducto"]),
-                filaDetalle("País de venta",    venta["nombrePais"]),
-                filaDetalle("Moneda",           venta["moneda"]),
+                filaDetalle("ID",                venta["id"]),
+                filaDetalle("Producto",          venta["nombreProducto"]),
+                filaDetalle("País de venta",     venta["nombrePais"]),
+                filaDetalle("Moneda",            venta["moneda"]),
                 filaDetalle("Precio modificado", f"{venta['precioModificado']:.2f} {venta['moneda']}"),
             ],
         ),
@@ -252,16 +217,16 @@ def dialogoEliminar(page: ft.Page, venta: dict, onConfirmar) -> ft.AlertDialog:
 #  Vista principal de Ventas
 # ─────────────────────────────────────────────
 def ventas(router) -> ft.Control:
-    global nextId
 
     tablaRef = ft.Ref[ft.DataTable]()
 
     def construirFilas() -> list[ft.DataRow]:
-        if not listaVentas:
+        datos = ventaController.obtenerVentas()
+        if not datos:
             return []
 
         filas = []
-        for i, v in enumerate(listaVentas):
+        for i, v in enumerate(datos):
             bgColor = constants.tableRowBg if i % 2 == 0 else constants.tableRowAlt
 
             def onVer(e, item=v):
@@ -269,20 +234,28 @@ def ventas(router) -> ft.Control:
                 abrirDialogo(router.page, dlg)
 
             def onEditar(e, item=v):
+                errorRef = ft.Ref[ft.Text]()
+
                 def guardarEdicion(datos):
-                    item["productoId"]       = datos["productoId"]
-                    item["nombreProducto"]   = datos["nombreProducto"]
-                    item["paisId"]           = datos["paisId"]
-                    item["nombrePais"]       = datos["nombrePais"]
-                    item["moneda"]           = datos["moneda"]
-                    item["precioModificado"] = datos["precioModificado"]
-                    refrescar()
-                dlg = dialogoVenta(router.page, guardarEdicion, item)
+                    resultado = ventaController.modificarVenta(
+                        id               = item["id"],
+                        productoId       = datos["productoId"],
+                        paisId           = datos["paisId"],
+                        precioModificado = datos["precioModificado"],
+                    )
+                    if isinstance(resultado, str):
+                        errorRef.current.value = resultado
+                        errorRef.current.update()
+                    else:
+                        refrescar()
+                        cerrarDialogo(router.page, dlg)
+
+                dlg = dialogoVenta(router.page, guardarEdicion, item, errorRef=errorRef)
                 abrirDialogo(router.page, dlg)
 
             def onEliminar(e, item=v):
                 def confirmar():
-                    listaVentas.remove(item)
+                    ventaController.eliminarVenta(item["id"])
                     refrescar()
                 dlg = dialogoEliminar(router.page, item, confirmar)
                 abrirDialogo(router.page, dlg)
@@ -291,9 +264,9 @@ def ventas(router) -> ft.Control:
                 ft.DataRow(
                     color=bgColor,
                     cells=[
-                        ft.DataCell(ft.Text(str(v["id"]),                              color=constants.TEXT_COLOR, size=13)),
-                        ft.DataCell(ft.Text(v["nombreProducto"],                       color=constants.TEXT_COLOR, size=13)),
-                        ft.DataCell(ft.Text(v["nombrePais"],                           color=constants.TEXT_COLOR, size=13)),
+                        ft.DataCell(ft.Text(str(v["id"]),                                color=constants.TEXT_COLOR, size=13)),
+                        ft.DataCell(ft.Text(v["nombreProducto"],                         color=constants.TEXT_COLOR, size=13)),
+                        ft.DataCell(ft.Text(v["nombrePais"],                             color=constants.TEXT_COLOR, size=13)),
                         ft.DataCell(ft.Text(f"{v['precioModificado']:.2f} {v['moneda']}", color=constants.TEXT_COLOR, size=13)),
                         ft.DataCell(
                             ft.Row(
@@ -333,23 +306,22 @@ def ventas(router) -> ft.Control:
         tablaRef.current.update()
 
     def abrirDialogoAgregar(e):
-        global nextId
+        errorRef = ft.Ref[ft.Text]()
 
         def guardarNuevo(datos):
-            global nextId
-            listaVentas.append({
-                "id"              : nextId,
-                "productoId"      : datos["productoId"],
-                "nombreProducto"  : datos["nombreProducto"],
-                "paisId"          : datos["paisId"],
-                "nombrePais"      : datos["nombrePais"],
-                "moneda"          : datos["moneda"],
-                "precioModificado": datos["precioModificado"],
-            })
-            nextId += 1
-            refrescar()
+            resultado = ventaController.guardarVenta(
+                productoId       = datos["productoId"],
+                paisId           = datos["paisId"],
+                precioModificado = datos["precioModificado"],
+            )
+            if isinstance(resultado, str):
+                errorRef.current.value = resultado
+                errorRef.current.update()
+            else:
+                refrescar()
+                cerrarDialogo(router.page, dlg)
 
-        dlg = dialogoVenta(router.page, guardarNuevo)
+        dlg = dialogoVenta(router.page, guardarNuevo, errorRef=errorRef)
         abrirDialogo(router.page, dlg)
 
     tabla = ft.DataTable(
@@ -362,11 +334,11 @@ def ventas(router) -> ft.Control:
         data_row_min_height=48,
         expand=True,
         columns=[
-            ft.DataColumn(ft.Text("ID",               color=constants.accentColor, weight=ft.FontWeight.BOLD, size=13)),
-            ft.DataColumn(ft.Text("Nombre Producto",  color=constants.accentColor, weight=ft.FontWeight.BOLD, size=13)),
-            ft.DataColumn(ft.Text("País de Venta",    color=constants.accentColor, weight=ft.FontWeight.BOLD, size=13)),
-            ft.DataColumn(ft.Text("Precio Modificado",color=constants.accentColor, weight=ft.FontWeight.BOLD, size=13)),
-            ft.DataColumn(ft.Text("Acciones",         color=constants.accentColor, weight=ft.FontWeight.BOLD, size=13)),
+            ft.DataColumn(ft.Text("ID",                color=constants.accentColor, weight=ft.FontWeight.BOLD, size=13)),
+            ft.DataColumn(ft.Text("Nombre Producto",   color=constants.accentColor, weight=ft.FontWeight.BOLD, size=13)),
+            ft.DataColumn(ft.Text("País de Venta",     color=constants.accentColor, weight=ft.FontWeight.BOLD, size=13)),
+            ft.DataColumn(ft.Text("Precio Modificado", color=constants.accentColor, weight=ft.FontWeight.BOLD, size=13)),
+            ft.DataColumn(ft.Text("Acciones",          color=constants.accentColor, weight=ft.FontWeight.BOLD, size=13)),
         ],
         rows=construirFilas(),
     )

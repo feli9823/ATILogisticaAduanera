@@ -1,17 +1,11 @@
 import flet as ft
 import styles.constants as constants
 from views.dashboard import layoutPrincipal
+from controller import productosController
 
 
 # ─────────────────────────────────────────────
-#  Datos en memoria
-# ─────────────────────────────────────────────
-listaProductos: list[dict] = []
-nextId = 1
-
-
-# ─────────────────────────────────────────────
-#  Utilidades para manejo de diálogos
+#  Utilidades para diálogos
 # ─────────────────────────────────────────────
 def abrirDialogo(page: ft.Page, dlg: ft.AlertDialog):
     if dlg not in page.overlay:
@@ -28,7 +22,7 @@ def cerrarDialogo(page: ft.Page, dlg: ft.AlertDialog):
 # ─────────────────────────────────────────────
 #  Diálogo: Añadir / Editar
 # ─────────────────────────────────────────────
-def dialogoProducto(page: ft.Page, onGuardar, producto: dict = None) -> ft.AlertDialog:
+def dialogoProducto(page: ft.Page, onGuardar, producto: dict = None, errorRef=None) -> ft.AlertDialog:
     esEdicion = producto is not None
 
     campoNombre = ft.TextField(
@@ -50,30 +44,28 @@ def dialogoProducto(page: ft.Page, onGuardar, producto: dict = None) -> ft.Alert
         keyboard_type=ft.KeyboardType.NUMBER,
         width=320,
     )
-    errorTxt = ft.Text("", color=ft.Colors.RED_400, size=12)
+
+    # errorTxt vinculado al ref externo para que onGuardar pueda actualizarlo
+    errorTxt = ft.Text("", color=ft.Colors.RED_400, size=12, ref=errorRef)
 
     def guardar(e):
-        if not campoNombre.value.strip():
-            errorTxt.value = "El nombre es obligatorio."
-            errorTxt.update()
-            return
-        if not campoPrecio.value.strip():
-            errorTxt.value = "El precio es obligatorio."
-            errorTxt.update()
-            return
+        # Limpiar error previo
+        errorTxt.value = ""
+        errorTxt.update()
+
+        # Única validación en el frontend: conversión de string a float
         try:
             precio = float(campoPrecio.value.strip())
         except ValueError:
-            errorTxt.value = "El precio debe ser un número."
+            errorTxt.value = "El precio debe ser un número (ej: 1500 o 99.99)."
             errorTxt.update()
             return
 
+        # Delegar todo lo demás al controller via onGuardar
         onGuardar({
             "nombre": campoNombre.value.strip(),
             "precio": precio,
-           
         })
-        cerrarDialogo(page, dlg)
 
     dlg = ft.AlertDialog(
         modal=True,
@@ -86,7 +78,7 @@ def dialogoProducto(page: ft.Page, onGuardar, producto: dict = None) -> ft.Alert
         content=ft.Column(
             tight=True,
             spacing=12,
-            controls=[campoNombre, campoPrecio,  errorTxt],
+            controls=[campoNombre, campoPrecio, errorTxt],
         ),
         actions=[
             ft.TextButton(
@@ -133,17 +125,16 @@ def dialogoVer(page: ft.Page, producto: dict) -> ft.AlertDialog:
             tight=True,
             spacing=10,
             controls=[
-                filaDetalle("ID",                  producto["id"]),
-                filaDetalle("Nombre",              producto["nombre"]),
-                filaDetalle("Precio base",         f" ₡ {producto['precio']}"),
-                
+                filaDetalle("ID",          producto["id"]),
+                filaDetalle("Nombre",      producto["nombre"]),
+                filaDetalle("Precio base", f"₡ {producto['precio']}"),
             ],
         ),
         actions=[
             ft.TextButton(
                 "Cerrar",
                 on_click=lambda e: cerrarDialogo(page, dlg),
-                style=ft.ButtonStyle(color=constants.   accentColor),
+                style=ft.ButtonStyle(color=constants.accentColor),
             ),
         ],
         actions_alignment=ft.MainAxisAlignment.END,
@@ -191,16 +182,16 @@ def dialogoEliminar(page: ft.Page, producto: dict, onConfirmar) -> ft.AlertDialo
 #  Vista principal de Productos
 # ─────────────────────────────────────────────
 def productos(router) -> ft.Control:
-    global nextId
 
     tablaRef = ft.Ref[ft.DataTable]()
 
     def construirFilas() -> list[ft.DataRow]:
-        if not listaProductos:
+        datos = productosController.obtenerProductos()
+        if not datos:
             return []
 
         filas = []
-        for i, p in enumerate(listaProductos):
+        for i, p in enumerate(datos):
             bgColor = constants.tableRowBg if i % 2 == 0 else constants.tableRowAlt
 
             def onVer(e, prod=p):
@@ -208,17 +199,28 @@ def productos(router) -> ft.Control:
                 abrirDialogo(router.page, dlg)
 
             def onEditar(e, prod=p):
+                errorRef = ft.Ref[ft.Text]()
+
                 def guardarEdicion(datos):
-                    prod["nombre"] = datos["nombre"]
-                    prod["precio"] = datos["precio"]
-                    
-                    refrescar()
-                dlg = dialogoProducto(router.page, guardarEdicion, prod)
+                    resultado = productosController.modificarProducto(
+                        id=prod["id"],
+                        nombre=datos["nombre"],
+                        precio=datos["precio"],
+                    )
+                    if isinstance(resultado, str):
+                        # Error del controller → mostrar en el diálogo
+                        errorRef.current.value = resultado
+                        errorRef.current.update()
+                    else:
+                        refrescar()
+                        cerrarDialogo(router.page, dlg)
+
+                dlg = dialogoProducto(router.page, guardarEdicion, prod, errorRef=errorRef)
                 abrirDialogo(router.page, dlg)
 
             def onEliminar(e, prod=p):
                 def confirmar():
-                    listaProductos.remove(prod)
+                    productosController.eliminarProducto(prod["id"])
                     refrescar()
                 dlg = dialogoEliminar(router.page, prod, confirmar)
                 abrirDialogo(router.page, dlg)
@@ -227,9 +229,9 @@ def productos(router) -> ft.Control:
                 ft.DataRow(
                     color=bgColor,
                     cells=[
-                        ft.DataCell(ft.Text(str(p["id"]),          color=constants.TEXT_COLOR, size=13)),
-                        ft.DataCell(ft.Text(p["nombre"],           color=constants.TEXT_COLOR, size=13)),
-                        ft.DataCell(ft.Text(f" ₡ {p['precio']}", color=constants.TEXT_COLOR, size=13)),
+                        ft.DataCell(ft.Text(str(p["id"]),        color=constants.TEXT_COLOR, size=13)),
+                        ft.DataCell(ft.Text(p["nombre"],         color=constants.TEXT_COLOR, size=13)),
+                        ft.DataCell(ft.Text(f"₡ {p['precio']}", color=constants.TEXT_COLOR, size=13)),
                         ft.DataCell(
                             ft.Row(
                                 spacing=4,
@@ -268,19 +270,23 @@ def productos(router) -> ft.Control:
         tablaRef.current.update()
 
     def abrirDialogoAgregar(e):
-        global nextId
+        errorRef = ft.Ref[ft.Text]()
 
         def guardarNuevo(datos):
-            global nextId
-            listaProductos.append({
-                "id"    : nextId,
-                "nombre": datos["nombre"],
-                "precio": datos["precio"],
-            })
-            nextId += 1
-            refrescar()
+            resultado = productosController.guardarProducto(
+                nombre=datos["nombre"],
+                precio=datos["precio"],
+            )
+            if isinstance(resultado, str):
+                # Error del controller → mostrar en el diálogo sin cerrarlo
+                errorRef.current.value = resultado
+                errorRef.current.update()
+            else:
+                # Éxito → refrescar tabla y cerrar
+                refrescar()
+                cerrarDialogo(router.page, dlg)
 
-        dlg = dialogoProducto(router.page, guardarNuevo)
+        dlg = dialogoProducto(router.page, guardarNuevo, errorRef=errorRef)
         abrirDialogo(router.page, dlg)
 
     tabla = ft.DataTable(
@@ -293,10 +299,10 @@ def productos(router) -> ft.Control:
         data_row_min_height=48,
         expand=True,
         columns=[
-            ft.DataColumn(ft.Text("ID",                  color=constants.accentColor, weight=ft.FontWeight.BOLD, size=13)),
-            ft.DataColumn(ft.Text("Nombre",              color=constants.accentColor, weight=ft.FontWeight.BOLD, size=13)),
-            ft.DataColumn(ft.Text("Precio en colones",              color=constants.accentColor, weight=ft.FontWeight.BOLD, size=13)),
-            ft.DataColumn(ft.Text("Acciones",            color=constants.accentColor, weight=ft.FontWeight.BOLD, size=13)),
+            ft.DataColumn(ft.Text("ID",                color=constants.accentColor, weight=ft.FontWeight.BOLD, size=13)),
+            ft.DataColumn(ft.Text("Nombre",            color=constants.accentColor, weight=ft.FontWeight.BOLD, size=13)),
+            ft.DataColumn(ft.Text("Precio en colones", color=constants.accentColor, weight=ft.FontWeight.BOLD, size=13)),
+            ft.DataColumn(ft.Text("Acciones",          color=constants.accentColor, weight=ft.FontWeight.BOLD, size=13)),
         ],
         rows=construirFilas(),
     )
@@ -338,7 +344,7 @@ def productos(router) -> ft.Control:
                             on_click=abrirDialogoAgregar,
                             style=ft.ButtonStyle(
                                 bgcolor={
-                                ft.ControlState.DEFAULT: constants.btnAddBg,
+                                    ft.ControlState.DEFAULT: constants.btnAddBg,
                                     ft.ControlState.HOVERED: "#A78BDA",
                                 },
                                 color=constants.btnAddText,
@@ -352,4 +358,4 @@ def productos(router) -> ft.Control:
         ),
     )
 
-    return layoutPrincipal(router, contenido, activePage="productos")
+    return layoutPrincipal(router, contenido, activePage="productos")   
