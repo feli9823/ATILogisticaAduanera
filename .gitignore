@@ -5,3 +5,8 @@
 /.documentos/
 .documentos
 .documentos/
+
+__pycache__/
+*.pyc
+*.pyo
+*.pyd

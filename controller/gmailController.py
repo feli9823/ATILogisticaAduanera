@@ -30,10 +30,11 @@ def enviarReporte(correoDestino: str, nombrePais: str, moneda: str) -> bool | st
     resultado = reporteController.generarReporte(nombrePais, moneda)
 
     # generarReporte retorna la ruta si éxito, o un str de error
-    if isinstance(resultado, str) and not resultado.endswith(".pdf"):
+    if not isinstance(resultado, str) or not resultado.endswith(".pdf"):
         return resultado or "No se pudo generar el PDF."
 
     rutaPDF = resultado
+    
 
     # ── 2. Enviar el PDF ─────────────────────────────────
     exito = _modeloGmail.enviarReporte(

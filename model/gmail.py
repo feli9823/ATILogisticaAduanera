@@ -75,16 +75,18 @@ class gmail:
 
             # ── Adjuntar el PDF ──────────────────────────────────
             nombreArchivo = os.path.basename(rutaPDF)
+            print(f"[gmail] Adjuntando PDF: {nombreArchivo}")
             with open(rutaPDF, "rb") as pdf:
                 adjunto = MIMEBase("application", "octet-stream")
                 adjunto.set_payload(pdf.read())
 
                 encoders.encode_base64(adjunto)
-            adjunto.add_header(
-                "Content-Disposition",
-                f'attachment; filename="{nombreArchivo}"',
-            )
-            mensaje.attach(adjunto)
+                adjunto.add_header(
+                    "Content-Disposition",
+                    "attachment",
+                    filename=nombreArchivo
+                )
+                mensaje.attach(adjunto)
 
             # ── Enviar vía SMTP Gmail ────────────────────────────
             with smtplib.SMTP_SSL("smtp.gmail.com", 465) as servidor:
@@ -103,4 +105,3 @@ class gmail:
         except Exception as e:
             print(f"[gmail] Error inesperado: {e}")
             return False
-    

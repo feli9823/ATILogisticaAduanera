@@ -79,7 +79,8 @@ def generarReporte(nombrePais: str, moneda: str) -> str:
     )
 
     if not rutaPDF:
-        return "No se pudo generar el PDF."
+        return "Error al generar el PDF. Revisa los logs."
+
     return rutaPDF
 
 
