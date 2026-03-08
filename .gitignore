@@ -2,9 +2,9 @@
 .venv/
 .vscode/
 .env
-/.documentos/
-.documentos
-.documentos/
+documentos/
+
+
 
 __pycache__/
 *.pyc
